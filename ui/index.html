@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en" class="scheme-dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>T1rho</title>
+  <link href="./tailwind.min.css" rel="stylesheet">
+  <style>
+    body {
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    #app {
+      position: relative;
+      overflow: auto;
+      margin: auto 0;
+    }
+    .preview-image {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-white text-sm">
+  <div id="app" x-data="app" class="p-4">
+    <div class="mx-auto max-w-3xl">
+      <h1 class="text-lg font-semibold text-slate-100">T1rho</h1>
+      <p class="mt-1 text-xs text-slate-400">Provide four DICOM instances and their corresponding TSL values in milliseconds, then fit a T1rho map.</p>
+
+      <section class="mt-4 rounded-xl border border-slate-700 bg-slate-950/60 p-3">
+        <div class="mb-2 flex items-center justify-between">
+          <div class="text-xs font-semibold uppercase tracking-wide text-slate-400">Inputs</div>
+          <div class="text-[11px] text-slate-500">4 instances + 4 TSL values</div>
+        </div>
+
+        <div class="space-y-2">
+          <template x-for="(slot, idx) in slots" :key="slot.id">
+            <div class="grid grid-cols-[44px_minmax(0,1fr)_112px] items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-2">
+              <div class="text-center">
+                <div class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Input</div>
+                <div class="text-sm font-semibold text-slate-200" x-text="idx + 1"></div>
+              </div>
+
+              <label class="min-w-0">
+                <span class="mb-1 block text-[11px] text-slate-400">DICOM Instance</span>
+                <input
+                  type="text"
+                  readonly
+                  :value="slot.payload?.selection?.name || ''"
+                  :class="slot.dragHover ? 'border-sky-400 bg-sky-400/10' : 'border-slate-600 bg-slate-800/60'"
+                  class="w-full rounded-md border px-3 py-2 text-xs"
+                  placeholder="Drop instance here"
+                  @dragover.prevent="slot.dragHover = true"
+                  @dragleave="slot.dragHover = false"
+                  @drop.prevent="handleDrop($event, idx)"
+                />
+              </label>
+
+              <label>
+                <span class="mb-1 block text-[11px] text-slate-400">TSL (ms)</span>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  x-model.number="slot.tslMs"
+                  class="w-full rounded-md border border-slate-600 bg-slate-800/60 px-3 py-2 text-xs"
+                  placeholder="e.g. 10"
+                />
+              </label>
+            </div>
+          </template>
+        </div>
+      </section>
+
+      <section class="mt-3 rounded-xl border border-slate-700 bg-slate-950/60 p-3">
+        <label class="flex flex-col gap-1">
+          <span class="text-xs text-slate-200">Output Folder</span>
+          <input
+            type="text"
+            x-model="outputDir"
+            readonly
+            class="rounded-md border border-slate-600 bg-slate-800/60 px-3 py-2 text-xs"
+            placeholder="Click to choose an output directory"
+            @click="selectOutputDir()"
+          />
+        </label>
+      </section>
+
+      <button
+        type="button"
+        class="mt-3 inline-flex items-center justify-center rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-sky-900/40 disabled:text-slate-400"
+        :disabled="processing || !canRun"
+        @click="runFit()"
+      >
+        <span x-text="processing ? 'Fitting…' : 'Fit T1rho Map'"></span>
+      </button>
+
+      <template x-if="outputPath">
+        <div class="mt-3 rounded-xl border border-slate-700 bg-slate-950/60 p-3">
+          <div class="text-xs font-semibold uppercase tracking-wide text-slate-400">Output</div>
+          <div class="mt-2 flex items-center gap-3 text-sm">
+            <a href="#" class="text-sky-300 hover:underline" @click.prevent="openWithVolView(outputPath)">
+              <span x-text="fileName(outputPath)"></span>
+            </a>
+            <button type="button" class="text-xs text-slate-400 hover:text-white" @click="showInFolder(outputPath)">Show in Folder</button>
+          </div>
+        </div>
+      </template>
+
+      <template x-if="previewPath">
+        <div class="mt-3 rounded-xl border border-slate-700 bg-slate-950/60 p-3">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="text-xs font-semibold uppercase tracking-wide text-slate-400">Pseudo-color Preview</div>
+              <div class="mt-1 text-xs text-slate-500">Jet colormap, range 0 to 100</div>
+            </div>
+          </div>
+          <div class="mt-3 overflow-hidden rounded-lg border border-slate-800 bg-black">
+            <img :src="previewPathWithCache" alt="T1rho preview" class="preview-image" />
+          </div>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <script src="./alpinejs@3.15.8/dist/cdn.min.js" defer></script>
+  <script>
+    const app = document.getElementById('app');
+    let data = null;
+
+    function createSlot(id) {
+      return {
+        id,
+        payload: null,
+        tslMs: null,
+        dragHover: false,
+      };
+    }
+
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('app', () => ({
+        slots: [createSlot(1), createSlot(2), createSlot(3), createSlot(4)],
+        outputDir: '',
+        processing: false,
+        outputPath: '',
+        previewPath: '',
+        previewCacheKey: 0,
+
+        get previewPathWithCache() {
+          if (!this.previewPath) return '';
+          return `file://${this.previewPath}?t=${this.previewCacheKey}`;
+        },
+
+        get canRun() {
+          return this.slots.every(slot => slot.payload?.selection?.slot === 'instance' && Number.isFinite(slot.tslMs)) && !!this.outputDir;
+        },
+
+        handleDrop(event, idx) {
+          $electron?.notifyDrop?.();
+          const slot = this.slots[idx];
+          slot.dragHover = false;
+          try {
+            const payload = JSON.parse(event.dataTransfer.getData('text') || 'null');
+            if (payload?.from === 'patient' && payload.selection?.slot === 'instance') {
+              slot.payload = payload;
+              this.outputPath = '';
+              this.previewPath = '';
+              this.previewCacheKey = 0;
+            }
+          } catch (err) {
+            console.error(err);
+          }
+        },
+
+        async selectOutputDir() {
+          const { canceled, filePaths } = await $electron.showOpenDialog({ properties: ['openDirectory'] });
+          if (!canceled && filePaths?.[0]) {
+            this.outputDir = filePaths[0];
+          }
+        },
+
+        async runFit() {
+          if (this.processing || !this.canRun) return;
+          this.processing = true;
+          this.outputPath = '';
+          this.previewPath = '';
+          this.previewCacheKey = 0;
+          try {
+            const args = [];
+            this.slots.forEach(slot => {
+              args.push(JSON.parse(JSON.stringify(slot.payload)));
+              args.push(Number(slot.tslMs));
+            });
+            args.push(this.outputDir);
+            const res = await $electron?.api('@pmt/t1rho/fit_t1rho_map', ...args);
+            if (res?.output_path) {
+              this.outputPath = res.output_path;
+            }
+            if (res?.preview_path) {
+              this.previewPath = res.preview_path;
+              this.previewCacheKey = Date.now();
+            }
+          } catch (err) {
+            console.error(err);
+            alert(err?.message || String(err));
+          } finally {
+            this.processing = false;
+          }
+        },
+      }));
+
+      setTimeout(() => {
+        data = app._x_dataStack[0];
+      }, 100);
+    });
+
+    window.__debugExportModuleApi = async function () {
+      try {
+        const snapshot = await $electron?.api('@pmt/t1rho/__debug_export_module_api__');
+        console.log('[export module api debug]', snapshot);
+        return snapshot;
+      } catch (err) {
+        console.error('[export module api debug] failed', err);
+        throw err;
+      }
+    };
+
+    window.addEventListener('DOMContentLoaded', () => $electron?.onLoaded());
+
+    function fileName(path) {
+      if (!path) return '';
+      return path.replace(/\\/g, '/').split('/').pop() ?? path;
+    }
+
+    function showInFolder(path) {
+      if (path) $electron?.showInFolder(path);
+    }
+
+    async function openWithVolView(filePath) {
+      return $electron?.openWithVolView?.(filePath, fileName(filePath), { newWindow: true });
+    }
+  </script>
+</body>
+</html>
