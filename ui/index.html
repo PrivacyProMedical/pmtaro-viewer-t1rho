@@ -29,12 +29,12 @@
   <div id="app" x-data="app" class="p-4">
     <div class="mx-auto max-w-3xl">
       <h1 class="text-lg font-semibold text-slate-100">T1rho</h1>
-      <p class="mt-1 text-xs text-slate-400">Provide four DICOM instances and their corresponding TSL values in milliseconds, then fit a T1rho map.</p>
+      <p class="mt-1 text-xs text-slate-400">Provide four DICOM inputs, then fit a T1rho map.</p>
 
       <section class="mt-4 rounded-xl border border-slate-700 bg-slate-950/60 p-3">
         <div class="mb-2 flex items-center justify-between">
           <div class="text-xs font-semibold uppercase tracking-wide text-slate-400">Inputs</div>
-          <div class="text-[11px] text-slate-500">4 instances + 4 TSL values</div>
+          <div class="text-[11px] text-slate-500">4 DICOM files + 4 TSL values</div>
         </div>
 
         <div class="space-y-2">
@@ -46,14 +46,14 @@
               </div>
 
               <label class="min-w-0">
-                <span class="mb-1 block text-[11px] text-slate-400">DICOM Instance</span>
+                <span class="mb-1 block text-[11px] text-slate-400">DICOM Input</span>
                 <input
                   type="text"
                   readonly
                   :value="slot.payload?.selection?.name || ''"
                   :class="slot.dragHover ? 'border-sky-400 bg-sky-400/10' : 'border-slate-600 bg-slate-800/60'"
                   class="w-full rounded-md border px-3 py-2 text-xs"
-                  placeholder="Drop instance here"
+                  placeholder="Drop instance or .dcm file here"
                   @dragover.prevent="slot.dragHover = true"
                   @dragleave="slot.dragHover = false"
                   @drop.prevent="handleDrop($event, idx)"
@@ -156,7 +156,7 @@
         },
 
         get canRun() {
-          return this.slots.every(slot => slot.payload?.selection?.slot === 'instance' && Number.isFinite(slot.tslMs)) && !!this.outputDir;
+          return this.slots.every(slot => isAcceptedDicomPayload(slot.payload) && Number.isFinite(slot.tslMs)) && !!this.outputDir;
         },
 
         handleDrop(event, idx) {
@@ -165,8 +165,9 @@
           slot.dragHover = false;
           try {
             const payload = JSON.parse(event.dataTransfer.getData('text') || 'null');
-            if (payload?.from === 'patient' && payload.selection?.slot === 'instance') {
-              slot.payload = payload;
+            const normalizedPayload = normalizeInputPayload(payload);
+            if (normalizedPayload) {
+              slot.payload = normalizedPayload;
               this.outputPath = '';
               this.previewPath = '';
               this.previewCacheKey = 0;
@@ -234,6 +235,56 @@
     function fileName(path) {
       if (!path) return '';
       return path.replace(/\\/g, '/').split('/').pop() ?? path;
+    }
+
+    function isDicomFileSelection(selection) {
+      if (!(selection?.isFile === true)) {
+        return false;
+      }
+      const type = typeof selection?.type === 'string' ? selection.type.toLowerCase() : '';
+      const name = typeof selection?.name === 'string' ? selection.name.toLowerCase() : '';
+      return type === '.dcm' || name.endsWith('.dcm');
+    }
+
+    function isAcceptedDicomPayload(payload) {
+      return !!(payload?.selection && isDicomFileSelection(payload.selection));
+    }
+
+    function normalizeInputPayload(payload) {
+      if (!payload || typeof payload !== 'object') {
+        return null;
+      }
+
+      if (payload?.from === 'patient' && payload.selection?.slot === 'instance') {
+        const filePath = payload.selection.filePath || payload.selection.path;
+        const name = payload.selection.fileName || payload.selection.name || fileName(filePath);
+        if (!(filePath && name)) {
+          return null;
+        }
+        return {
+          from: 'module',
+          selection: {
+            name,
+            path: filePath,
+            isFile: true,
+            type: '.dcm',
+          },
+        };
+      }
+
+      if (payload?.from === 'root' && isDicomFileSelection(payload.selection)) {
+        return {
+          from: 'root',
+          selection: {
+            name: payload.selection.name || fileName(payload.selection.path),
+            path: payload.selection.path,
+            isFile: true,
+            type: payload.selection.type || '.dcm',
+          },
+        };
+      }
+
+      return null;
     }
 
     function showInFolder(path) {

@@ -222,13 +222,13 @@ __export_module_api__ = {
     'functions': {
         'fit_t1rho_map': {
             'args': [
-                {'name': 'instance1', 'type': 'INSTANCE'},
+                {'name': 'instance1', 'type': 'FILE'},
                 {'name': 'tsl1_ms', 'type': 'NUMBER'},
-                {'name': 'instance2', 'type': 'INSTANCE'},
+                {'name': 'instance2', 'type': 'FILE'},
                 {'name': 'tsl2_ms', 'type': 'NUMBER'},
-                {'name': 'instance3', 'type': 'INSTANCE'},
+                {'name': 'instance3', 'type': 'FILE'},
                 {'name': 'tsl3_ms', 'type': 'NUMBER'},
-                {'name': 'instance4', 'type': 'INSTANCE'},
+                {'name': 'instance4', 'type': 'FILE'},
                 {'name': 'tsl4_ms', 'type': 'NUMBER'},
                 {'name': 'output_dir', 'type': 'STRING'},
             ],
