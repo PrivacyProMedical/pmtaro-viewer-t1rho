@@ -210,34 +210,3 @@ def _write_png_rgb(rgb_uint8, output_path: Path):
         chunk(b'IEND', b''),
     ])
     output_path.write_bytes(png_bytes)
-
-
-# Standard-mode export declaration.
-#
-# This optional object explicitly declares which public Python functions are
-# exported to the module frontend, along with their standardized argument and
-# return types.
-__export_module_api__ = {
-    'version': 1,
-    'functions': {
-        'fit_t1rho_map': {
-            'args': [
-                {'name': 'instance1', 'type': 'FILE'},
-                {'name': 'tsl1_ms', 'type': 'NUMBER'},
-                {'name': 'instance2', 'type': 'FILE'},
-                {'name': 'tsl2_ms', 'type': 'NUMBER'},
-                {'name': 'instance3', 'type': 'FILE'},
-                {'name': 'tsl3_ms', 'type': 'NUMBER'},
-                {'name': 'instance4', 'type': 'FILE'},
-                {'name': 'tsl4_ms', 'type': 'NUMBER'},
-                {'name': 'output_dir', 'type': 'STRING'},
-            ],
-            'returns': {
-                'fields': [
-                    {'name': 'output_dcm', 'type': 'FILE'},
-                    {'name': 'preview_png', 'type': 'FILE'},
-                ],
-            },
-        },
-    },
-}

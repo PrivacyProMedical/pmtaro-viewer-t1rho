@@ -92,7 +92,5 @@ export default {
     async fit_t1rho_map(instance1, tsl1_ms, instance2, tsl2_ms, instance3, tsl3_ms, instance4, tsl4_ms, outputDir) {
       return fitT1rhoMap(instance1, tsl1_ms, instance2, tsl2_ms, instance3, tsl3_ms, instance4, tsl4_ms, outputDir);
     },
-
-    __debug_export_module_api__: runtime.createDebugHandler(),
   },
 };
