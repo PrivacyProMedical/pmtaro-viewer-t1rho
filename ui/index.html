@@ -132,6 +132,40 @@
     const app = document.getElementById('app');
     let data = null;
 
+    // Build a valid file:// URL from a filesystem path.
+    //
+    // `file://${path}` only happens to work for POSIX paths: a Windows path keeps
+    // its backslashes (percent-encoded to %5C) and the URL ends up with an empty
+    // host and no third slash, which Chromium rejects with net::ERR_FAILED - the
+    // preview then never loads. `encodeURI` is not sufficient either, because it
+    // leaves `#` and `?` unencoded; the preview path is a temp file supplied by
+    // the renderer, so it is percent-encoded per segment instead.
+    function toFileUrl(rawPath) {
+      let filePath = String(rawPath || '').replace(/[\\/]+$/, '') || String(rawPath || '');
+      if (/^file:/i.test(filePath)) return filePath;
+      // Windows extended-length prefixes are ignored, exactly as Node's
+      // pathToFileURL ignores them: \\?\C:\dir\file and \\?\UNC\server\share\file.
+      if (/^\\\\\?\\UNC\\/i.test(filePath)) {
+        filePath = `\\\\${filePath.slice(8)}`;
+      } else if (filePath.startsWith('\\\\?\\')) {
+        filePath = filePath.slice(4);
+      }
+      if (filePath.startsWith('\\\\')) {
+        // UNC share: \\server\share\file -> file://server/share/file
+        const segments = filePath.slice(2).split(/[\\/]+/);
+        const host = segments.shift();
+        return `file://${host}/${segments.map(encodeURIComponent).join('/')}`;
+      }
+      const slashed = filePath.replace(/\\/g, '/');
+      const drive = /^([A-Za-z]):\//.exec(slashed);
+      if (drive) {
+        // Keep the drive colon literal: file:///C:/dir/file
+        return `file:///${drive[1]}:/${slashed.slice(drive[0].length).split('/').map(encodeURIComponent).join('/')}`;
+      }
+      return (slashed.startsWith('/') ? 'file://' : 'file:///')
+        + slashed.split('/').map(encodeURIComponent).join('/');
+    }
+
     function createSlot(id) {
       return {
         id,
@@ -152,7 +186,7 @@
 
         get previewPathWithCache() {
           if (!this.previewPath) return '';
-          return `file://${this.previewPath}?t=${this.previewCacheKey}`;
+          return `${toFileUrl(this.previewPath)}?t=${this.previewCacheKey}`;
         },
 
         get canRun() {
