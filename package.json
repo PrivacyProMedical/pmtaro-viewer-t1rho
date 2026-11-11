@@ -10,7 +10,7 @@
     "build": "npx @tailwindcss/cli -i ./ui/tailwind.css -o ./ui/tailwind.min.css --minify"
   },
   "dependencies": {
-    "pyodide": "0.29.4"
+    "pyodide": "0.29.5"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.2.2",
